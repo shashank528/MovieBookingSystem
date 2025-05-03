@@ -2,9 +2,12 @@ package org.example.service;
 
 import lombok.AllArgsConstructor;
 import lombok.Getter;
+import org.example.Factory.PaymentStrategyFactory;
 import org.example.enums.BookingStatus;
 import org.example.model.*;
+import org.example.provider.IPaymentStrategy;
 import org.example.provider.ISeatLockProvider;
+import org.example.provider.UpiPaymentStrategy;
 
 import java.util.*;
 import java.util.concurrent.ConcurrentHashMap;
@@ -13,6 +16,7 @@ import java.util.concurrent.atomic.AtomicInteger;
 @Getter
 public class BookingService {
     ISeatLockProvider seatLockProvider;
+    IPaymentStrategy paymentStrategy;
     Map<Show,Map<Integer,Booking>> bookingMap = new ConcurrentHashMap<>();
     AtomicInteger bookingCounter = new AtomicInteger(0);
 
@@ -30,9 +34,16 @@ public class BookingService {
         Booking booking = new Booking(bookingId,user,show,seats, BookingStatus.CREATED);
         bookingMap.putIfAbsent(show,new ConcurrentHashMap<>());
         bookingMap.get(show).putIfAbsent(bookingId,booking);
+        IPaymentStrategy paymentStrategy = choosePaymentStrategy("upi");
+        confirmBooking(bookingId,show,new UpiPaymentStrategy());
         System.out.println("booking succesfull "+booking);
         return bookingId;
     }
+
+    private IPaymentStrategy choosePaymentStrategy(String key) {
+       return  PaymentStrategyFactory.createPaymentStrategy(key);
+    }
+
     public Set<Seat> getBookedSeat(Show show)
     {
         if(!bookingMap.containsKey(show))
@@ -78,4 +89,25 @@ public class BookingService {
         List<Seat> lockedSeats = seatLockProvider.getLockedSeats(show);
         return new HashSet<>(lockedSeats);
     }
+    public void confirmBooking(int bookingId, Show show, IPaymentStrategy paymentStrategy) throws Exception {
+        Booking booking = bookingMap.getOrDefault(show, Collections.emptyMap()).get(bookingId);
+
+        if (booking == null) {
+            throw new Exception("Booking not found");
+        }
+
+        if (booking.getBookingStatus() != BookingStatus.CREATED) {
+            throw new Exception("Booking is not in a confirmable state");
+        }
+        // Use provided payment strategy to process the paymenchoose
+        boolean paymentSuccess = paymentStrategy.processPayment(booking);
+
+        if (!paymentSuccess) {
+            throw new Exception("Payment failed");
+        }
+        // Update booking status
+        booking.setBookingStatus(BookingStatus.CONFIRMED);
+        System.out.println("Booking confirmed with ID: " + bookingId);
+    }
+
 }

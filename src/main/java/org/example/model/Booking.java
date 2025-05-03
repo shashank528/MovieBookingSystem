@@ -20,5 +20,9 @@ public class Booking {
     {
         return seats;
     }
+    public void setBookingStatus(BookingStatus bookingStatus)
+    {
+        this.bookingStatus=bookingStatus;
+    }
 
 }
